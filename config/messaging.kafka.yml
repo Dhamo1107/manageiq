@@ -1,0 +1,17 @@
+---
+base: &base
+  host: localhost
+  port: 9092
+  protocol: Kafka
+  encoding: json
+  username: admin
+  password: smartvm
+
+development:
+  <<: *base
+
+production:
+  <<: *base
+
+test:
+  <<: *base

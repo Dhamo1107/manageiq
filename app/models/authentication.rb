@@ -1,0 +1,182 @@
+class Authentication < ApplicationRecord
+  acts_as_miq_taggable
+  include ImportExport
+  include YamlImportExportMixin
+  include SupportsFeatureMixin
+  include NewWithTypeStiMixin
+  def self.new(*args, &block)
+    if self == Authentication && (args.empty? || args.first.kind_of?(Hash))
+      args = [{}] if args.empty?
+      h = args.first
+
+      type = h[inheritance_column.to_sym] || h[inheritance_column.to_s]
+      h[inheritance_column.to_sym] = "AuthUseridPassword" if type.nil?
+    end
+
+    super
+  end
+
+  include ManageIQ::Password::PasswordMixin
+  encrypt_column :auth_key
+  encrypt_column :auth_key_password
+  encrypt_column :become_password
+  encrypt_column :password
+  encrypt_column :service_account
+
+  belongs_to :resource, :polymorphic => true
+
+  has_many :authentication_configuration_script_bases,
+           :dependent => :destroy
+  has_many :configuration_script_bases,
+           :through => :authentication_configuration_script_bases
+
+  has_many :authentication_orchestration_stacks,
+           :dependent => :destroy
+  has_many :orchestration_stacks,
+           :through => :authentication_orchestration_stacks
+
+  has_many :configuration_script_sources
+
+  before_save :set_credentials_changed_on
+  after_save :after_authentication_changed
+
+  serialize :options
+
+  include OwnershipMixin
+  include TenancyMixin
+
+  belongs_to :tenant
+
+  # TODO: DELETE ME!!!!
+  ERRORS = {
+    :incomplete => "Incomplete credentials",
+    :invalid    => "Invalid credentials",
+  }.freeze
+
+  STATUS_SEVERITY = Hash.new(-1).merge(
+    ""            => -1,
+    "valid"       => 0,
+    "none"        => 1,
+    "incomplete"  => 1,
+    "error"       => 2,
+    "unreachable" => 2,
+    "invalid"     => 3
+  ).freeze
+
+  # Builds a case statement that case be used in a sql ORDER BY.
+  #
+  # Generated SQL looks like:
+  #
+  #   CASE
+  #   WHEN LOWER(status) = ''      THEN -1
+  #   WHEN LOWER(status) = 'valid' THEN 0
+  #   ...
+  #   ELSE -1
+  #
+  STATUS_SEVERITY_AREL = Arel::Nodes::Case.new.tap do |arel_case|
+    STATUS_SEVERITY.each do |value, sort_weight|
+      arel_case.when(arel_table[:status].lower.eq(value)).then(sort_weight)
+    end
+  end.else(-1)
+
+  RETRYABLE_STATUS = %w[error unreachable].freeze
+
+  # FIXME: To address problem with url resolution when displayed as a quadicon,
+  # but it's not *really* the db_name. Might be more proper to override `to_partial_path`
+  def self.db_name
+    "auth_key_pair_cloud"
+  end
+
+  def status_severity
+    STATUS_SEVERITY[status.to_s.downcase]
+  end
+
+  def retryable_status?
+    RETRYABLE_STATUS.include?(status.to_s.downcase)
+  end
+
+  def authentication_type
+    authtype.nil? ? :default : authtype.to_sym
+  end
+
+  def available?
+    password.present? || auth_key.present?
+  end
+
+  # The various status types:
+  #   valid, invalid
+  #   incomplete  (???)
+  #   unreachable (for all communications errors)
+  #   error (for unpredictable errors)
+  def validation_successful
+    new_status = :valid
+    _log.info("[#{resource_type}] [#{resource_id}], previously valid/invalid on: [#{last_valid_on}]/[#{last_invalid_on}], previous status: [#{status}]") if status != new_status.to_s
+    update(:status => new_status.to_s.capitalize, :status_details => 'Ok', :last_valid_on => Time.now.utc)
+    raise_event(new_status)
+  end
+
+  def validation_failed(status = :unreachable, message = nil)
+    message ||= ERRORS[status]
+    _log.warn("[#{resource_type}] [#{resource_id}], previously valid on: #{last_valid_on}, previous status: [#{self.status}]")
+    update(:status => status.to_s.capitalize, :status_details => message.to_s.truncate(200), :last_invalid_on => Time.now.utc)
+    raise_event(status, message)
+  end
+
+  def raise_event(status, _message = nil)
+    ci = resource
+    return unless ci
+
+    prefix = event_prefix
+    return if prefix.blank?
+
+    MiqEvent.raise_evm_event_queue(ci, "#{prefix}_auth_#{status}")
+  end
+
+  def assign_values(options)
+    self.attributes = options
+  end
+
+  def self.credential_types
+    credential_subclasses = descendants.select { |d| d.try(:credential_type) }.sort_by(&:name)
+
+    credential_subclasses.each_with_object({}) do |klass, credential_hash|
+      credential_hash[klass.credential_type.to_sym] ||= {}
+
+      if defined?(klass::API_OPTIONS)
+        credential_hash[klass.credential_type.to_sym].merge!({klass.name => klass::API_OPTIONS})
+      end
+    end
+  end
+
+  def native_ref
+    # to be overridden by individual provider/manager
+    manager_ref
+  end
+
+  private
+
+  def set_credentials_changed_on
+    return unless @auth_changed
+
+    self.credentials_changed_on = Time.now.utc
+  end
+
+  def after_authentication_changed
+    return unless @auth_changed
+
+    _log.info("[#{resource_type}] [#{resource_id}], previously valid on: [#{last_valid_on}]")
+
+    raise_event(:changed)
+
+    # Async validate the credentials
+    resource.authentication_check_types_queue(authentication_type) if resource
+    @auth_changed = false
+  end
+
+  def event_prefix
+    case resource_type
+    when "Host"                then "host"
+    when "ExtManagementSystem" then "ems"
+    end
+  end
+end

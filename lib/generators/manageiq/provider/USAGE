@@ -1,0 +1,8 @@
+Description:
+    Create or update ManageIQ provider plugin
+
+Example:
+    rails generate manageiq:provider ManageIQ::Providers::VendorName --manager-type=cloud
+    rails generate manageiq:provider ManageIQ::Providers::VendorName --manager-type=cloud --path ~/dev
+    rails generate manageiq:provider ManageIQ::Providers::VendorName --manager-type=cloud --vcr
+    rails generate manageiq:provider ManageIQ::Providers::VendorName --no-scaffolding

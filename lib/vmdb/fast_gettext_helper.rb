@@ -1,0 +1,70 @@
+require 'vmdb/gettext/domains'
+
+module Vmdb
+  module FastGettextHelper
+    def self.register_human_localenames
+      human_locale_names = YAML.load_file(Rails.root.join('config/human_locale_names.yaml'))['human_locale_names']
+
+      FastGettext.class.class_eval { attr_accessor :human_available_locales }
+      FastGettext.human_available_locales = []
+      FastGettext.available_locales.each do |locale|
+        FastGettext.human_available_locales << [human_locale_names[locale] || "locale_name", locale]
+      end
+      FastGettext.human_available_locales.sort_by! { |a| a[0] }
+    end
+
+    def self.fix_i18n_available_locales
+      I18n.available_locales += FastGettext.available_locales.grep(/_/).map { |i| i.tr("_", "-") }
+    end
+
+    def self.find_available_locales_via_directories
+      locale_path.children.select(&:directory?).map { |p| p.basename.to_s }.sort
+    end
+
+    def self.supported_locales
+      # Format of YAML file is expected to be as follows
+      #  and match the directory names in locale/
+      #
+      # ---
+      # - en
+      # - it
+      # - nl
+      #
+      @supported_locales ||= supported_locales_files.flat_map { |file| YAML.load_file(file) }
+    end
+
+    private_class_method def self.supported_locales_files
+      Vmdb::Plugins.to_a.unshift(Rails)
+        .map { |source| source.root.join("config", "supported_locales.yml") }
+        .select(&:exist?)
+    end
+
+    def self.find_available_locales
+      available_locales = find_available_locales_via_directories
+      available_locales &= supported_locales if supported_locales.any?
+      available_locales
+    end
+
+    def self.locale_path
+      @locale_path ||= Rails.root.join("locale")
+    end
+
+    def self.register_locales
+      Vmdb::Gettext::Domains.add_domain(Vmdb::Gettext::Domains::TEXT_DOMAIN, locale_path.to_s, :po) # Default ManageIQ domain
+      Vmdb::Gettext::Domains.add_domain(Vmdb::Gettext::Domains::TEXT_DOMAIN, locale_path.to_s, :mo)
+      Vmdb::Gettext::Domains.initialize_chain_repo
+
+      available_locales = find_available_locales
+      FastGettext.default_available_locales = available_locales
+      FastGettext.default_locale = 'en' if available_locales.include?('en')
+
+      # temporary hack to fix a problem with locales including "_"
+      fix_i18n_available_locales
+      FastGettext.default_text_domain = Vmdb::Gettext::Domains::TEXT_DOMAIN
+    end
+
+    def self.locale_name
+      _('locale_name')
+    end
+  end
+end

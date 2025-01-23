@@ -1,0 +1,52 @@
+---
+yaml_strings_to_extract:
+  db/fixtures/chargeable_fields.yml:
+  - description
+  db/fixtures/chargeback_rates.yml:
+  - description
+  db/fixtures/miq_event_definition_events.yml:
+  - name
+  - description
+  - event_type
+  - set_type
+  db/fixtures/miq_event_definition_sets.yml:
+  - name
+  - description
+  db/fixtures/miq_product_features{.yml,.yaml,/*.yml,/*.yaml}:
+  - name
+  - description
+  db/fixtures/miq_report_formats.*:
+  - description
+  db/fixtures/notification_types.*:
+  - message
+  product/charts/layouts/*.yaml:
+  - title
+  product/charts/layouts/*/*.yaml:
+  - title
+  product/charts/miq_reports/vmdb_database.yaml:
+  - headers
+  - title
+  - name
+  product/compare/*.yaml:
+  - headers
+  - group
+  - menu_name
+  - title
+  product/reports/*/*.*:
+  - headers
+  - menu_name
+  - title
+  product/timelines/miq_reports/*.*:
+  - title
+  - name
+  - headers
+  product/charts/miq_reports/*.yaml:
+  - title
+  - name
+  - headers
+  - generate_rows
+  product/dashboard/widgets/*.yaml:
+  - title
+  product/dashboard/dashboards/*.yaml:
+  - name
+  - description

@@ -1,0 +1,19 @@
+AllCops:
+  Exclude:
+  - lib/generators/**/templates/**/*
+  - db/schema.rb
+Style/GlobalVars:
+  AllowedVariables:
+  # Loggers
+  - $api_log
+  - $audit_log
+  - $log
+  - $policy_log
+  - $rails_log
+  - $remote_console_log
+Rails/Exit:
+  Exclude:
+  - lib/workers/bin/*
+Rails/Output:
+  Exclude:
+  - lib/workers/bin/*
