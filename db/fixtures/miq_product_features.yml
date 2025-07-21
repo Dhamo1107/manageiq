@@ -4530,6 +4530,18 @@
       :description: Check Compliance of Last Known Configuration
       :feature_type: control
       :identifier: container_group_check_compliance
+    - :name: Add
+      :description: Add a New Pod
+      :feature_type: admin
+      :identifier: container_group_new
+    - :name: Edit
+      :description: Edit Pod
+      :feature_type: admin
+      :identifier: container_group_edit
+    - :name: Delete
+      :description: Delete Pods
+      :feature_type: admin
+      :identifier: container_group_delete
 
 # ContainerNode
 - :name: Nodes

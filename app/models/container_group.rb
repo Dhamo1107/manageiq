@@ -119,6 +119,94 @@ class ContainerGroup < ApplicationRecord
     save
   end
 
+  def self.class_by_ems(ext_management_system)
+    ext_management_system&.class_by_ems(:ContainerGroup)
+  end
+
+  def self.create_container_pod(ems_id, options = {})
+    ems = ExtManagementSystem.find_by(:id => ems_id)
+    raise ArgumentError, _("EMS cannot be nil") if ems.nil?
+
+    klass = ems.class_by_ems(:ContainerGroup)
+    klass.raw_create_container_pod(ems, options)
+  end
+
+  def self.raw_create_container_pod(_ext_management_system, _options = {})
+    raise NotImplementedError, _("raw_create_container_pod must be implemented in a subclass")
+  end
+
+  def self.create_container_pod_queue(userid, ext_management_system, options = {})
+    task_opts = {
+      :action => "Creating Container Pod for user #{userid}",
+      :userid => userid
+    }
+
+    queue_opts = {
+      :class_name  => ext_management_system.class_by_ems(:ContainerGroup).name,
+      :method_name => 'create_container_pod',
+      :role        => 'ems_operations',
+      :queue_name  => ext_management_system.queue_name_for_ems_operations,
+      :zone        => ext_management_system.my_zone,
+      :args        => [ext_management_system.id, options]
+    }
+
+    MiqTask.generic_action_with_callback(task_opts, queue_opts)
+  end
+
+  def update_container_pod(options = {})
+    raw_update_container_pod(options)
+  end
+
+  def raw_update_container_pod(_options = {})
+    raise NotImplementedError, _("raw_update_container_pod must be implemented in a subclass")
+  end
+
+  def update_container_pod_queue(userid, options = {})
+    task_opts = {
+      :action => "Updating Container Pod for user #{userid}",
+      :userid => userid
+    }
+
+    queue_opts = {
+      :class_name  => self.class.name,
+      :method_name => 'update_container_pod',
+      :instance_id => id,
+      :role        => 'ems_operations',
+      :queue_name  => ext_management_system.queue_name_for_ems_operations,
+      :zone        => ext_management_system.my_zone,
+      :args        => [options]
+    }
+
+    MiqTask.generic_action_with_callback(task_opts, queue_opts)
+  end
+
+  def delete_container_pod
+    raw_delete_container_pod
+  end
+
+  def delete_container_pod_queue(userid)
+    task_opts = {
+      :action => "Deleting Container Pod for user #{userid}",
+      :userid => userid
+    }
+
+    queue_opts = {
+      :class_name  => self.class.name,
+      :method_name => 'delete_container_pod',
+      :instance_id => id,
+      :role        => 'ems_operations',
+      :queue_name  => ext_management_system.queue_name_for_ems_operations,
+      :zone        => ext_management_system.my_zone,
+      :args        => []
+    }
+
+    MiqTask.generic_action_with_callback(task_opts, queue_opts)
+  end
+
+  def raw_delete_container_pod
+    raise NotImplementedError, _("raw_delete_container_pod must be implemented in a subclass")
+  end
+
   def self.display_name(number = 1)
     n_('Pod', 'Pods', number)
   end
